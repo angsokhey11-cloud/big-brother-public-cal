@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BIG BROTHER — Standalone Calculator V1.0</title>
+<title>BIG BROTHER — Standalone Calculator V1.1 History & Memory</title>
 
 <style>
   :root{
@@ -726,6 +726,173 @@
       width:100%;
     }
   }
+
+  /* =========================================================
+     V1.1 HISTORY + PERSISTENT MEMORY
+     ========================================================= */
+  .history-card{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:13px;
+    padding:13px;
+    margin-bottom:11px;
+  }
+
+  .history-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:10px;
+  }
+
+  .history-head h2{
+    margin:0;
+    color:var(--navy);
+    font-size:17px;
+  }
+
+  .history-actions{
+    display:flex;
+    gap:7px;
+    flex-wrap:wrap;
+  }
+
+  .history-action-btn{
+    min-height:36px;
+    border:0;
+    border-radius:8px;
+    padding:7px 10px;
+    font-size:11px;
+    font-weight:900;
+  }
+
+  .history-toggle{
+    background:#edf4ff;
+    color:#245fae;
+  }
+
+  .history-clear{
+    background:#fff0ef;
+    color:#c0392b;
+  }
+
+  .history-panel[hidden]{display:none}
+
+  .history-empty{
+    border:1px dashed #ccd8e6;
+    border-radius:10px;
+    padding:22px 12px;
+    text-align:center;
+    color:var(--muted);
+    font-size:12px;
+    line-height:1.5;
+    background:#fbfcfe;
+  }
+
+  .history-list{
+    display:grid;
+    gap:8px;
+  }
+
+  .history-item{
+    border:1px solid #dfe7f0;
+    border-radius:10px;
+    padding:10px;
+    background:#fff;
+  }
+
+  .history-item-top{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:10px;
+  }
+
+  .history-item-title{
+    color:var(--navy);
+    font-size:13px;
+    font-weight:900;
+  }
+
+  .history-item-meta{
+    margin-top:3px;
+    color:var(--muted);
+    font-size:10px;
+    line-height:1.4;
+  }
+
+  .history-total{
+    flex:0 0 auto;
+    color:#0e3f80;
+    font-weight:1000;
+    font-size:14px;
+    white-space:nowrap;
+  }
+
+  .history-item-products{
+    margin-top:8px;
+    padding-top:8px;
+    border-top:1px solid #edf1f5;
+    display:grid;
+    gap:4px;
+  }
+
+  .history-product{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    color:#51677e;
+    font-size:10px;
+  }
+
+  .history-item-buttons{
+    display:flex;
+    gap:7px;
+    margin-top:9px;
+    flex-wrap:wrap;
+  }
+
+  .history-small-btn{
+    min-height:34px;
+    border:0;
+    border-radius:8px;
+    padding:6px 9px;
+    font-size:10px;
+    font-weight:900;
+  }
+
+  .history-load{
+    background:#eaf4ff;
+    color:#245fae;
+  }
+
+  .history-delete{
+    background:#fff0ef;
+    color:#c0392b;
+  }
+
+  .memory-note{
+    margin-top:7px;
+    color:#6f8297;
+    font-size:10px;
+  }
+
+  @media(max-width:760px){
+    .history-head{
+      align-items:flex-start;
+    }
+
+    .history-item-top{
+      display:grid;
+      grid-template-columns:1fr;
+    }
+
+    .history-total{
+      white-space:normal;
+    }
+  }
+
 </style>
 </head>
 
@@ -858,6 +1025,25 @@
 
   </div>
 
+
+  <div class="history-card">
+    <div class="history-head">
+      <div>
+        <h2>🕘 Calculator History</h2>
+        <div class="memory-note">Current calculation and history stay on this device until you clear them.</div>
+      </div>
+
+      <div class="history-actions">
+        <button class="history-action-btn history-toggle" type="button" id="historyToggleBtn">Show History</button>
+        <button class="history-action-btn history-clear" type="button" id="historyClearBtn">Clear History</button>
+      </div>
+    </div>
+
+    <div class="history-panel" id="historyPanel" hidden>
+      <div id="historyList"></div>
+    </div>
+  </div>
+
 </div>
 
 <div class="modal hidden" id="qtyModal">
@@ -945,6 +1131,14 @@
   const PRODUCT_CACHE_AGE =
     12 * 60 * 60 * 1000;
 
+  const CURRENT_MEMORY_KEY =
+    "bb_standalone_calculator_current_v1";
+
+  const HISTORY_MEMORY_KEY =
+    "bb_standalone_calculator_history_v1";
+
+  const MAX_HISTORY_ITEMS = 100;
+
   const $ = id =>
     document.getElementById(id);
 
@@ -969,6 +1163,8 @@
   let pendingProduct = null;
   let pendingQty = 0;
   let discountUSD = 0;
+  let history = [];
+  let restoringMemory = false;
 
   function cacheSet(key,value){
     try{
@@ -1084,6 +1280,442 @@
           timeout
         );
     });
+  }
+
+  function saveCurrentMemory(){
+    if(restoringMemory) return;
+
+    try{
+      const state = {
+        savedAt:Date.now(),
+        currency:currency(),
+        rate:rate(),
+        discountUSD:num(discountUSD),
+        lines:lines.map(line => ({
+          id:clean(line.id),
+          productCode:clean(line.productCode),
+          productName:clean(line.productName),
+          unit:clean(line.unit),
+          qty:num(line.qty),
+          usdPrice:num(line.usdPrice)
+        }))
+      };
+
+      localStorage.setItem(
+        CURRENT_MEMORY_KEY,
+        JSON.stringify(state)
+      );
+    }catch(_){}
+  }
+
+  function clearCurrentMemory(){
+    try{
+      localStorage.removeItem(
+        CURRENT_MEMORY_KEY
+      );
+    }catch(_){}
+  }
+
+  function loadHistoryMemory(){
+    try{
+      const parsed = JSON.parse(
+        localStorage.getItem(HISTORY_MEMORY_KEY) || "[]"
+      );
+
+      history = Array.isArray(parsed)
+        ? parsed
+        : [];
+    }catch(_){
+      history = [];
+    }
+  }
+
+  function saveHistoryMemory(){
+    try{
+      localStorage.setItem(
+        HISTORY_MEMORY_KEY,
+        JSON.stringify(history)
+      );
+    }catch(_){}
+  }
+
+  function getTotalsForState(state){
+    const stateLines =
+      Array.isArray(state?.lines)
+        ? state.lines
+        : [];
+
+    let subtotalUSD = 0;
+
+    stateLines.forEach(line=>{
+      subtotalUSD +=
+        Math.max(0,num(line.qty)) *
+        Math.max(0,num(line.usdPrice));
+    });
+
+    const stateDiscount =
+      Math.max(
+        0,
+        num(state?.discountUSD)
+      );
+
+    return {
+      subtotalUSD,
+      grandUSD:
+        Math.max(
+          0,
+          subtotalUSD - stateDiscount
+        )
+    };
+  }
+
+  function currentSnapshot(){
+    return {
+      id:
+        "HIST-" +
+        Date.now() +
+        "-" +
+        Math.random()
+          .toString(36)
+          .slice(2,7),
+
+      createdAt:Date.now(),
+      currency:currency(),
+      rate:rate(),
+      discountUSD:num(discountUSD),
+
+      lines:lines.map(line=>({
+        id:clean(line.id),
+        productCode:clean(line.productCode),
+        productName:clean(line.productName),
+        unit:clean(line.unit),
+        qty:num(line.qty),
+        usdPrice:num(line.usdPrice)
+      }))
+    };
+  }
+
+  function archiveCurrentCalculation(){
+    if(!lines.length) return false;
+
+    const snapshot =
+      currentSnapshot();
+
+    history.unshift(snapshot);
+
+    if(history.length > MAX_HISTORY_ITEMS){
+      history =
+        history.slice(
+          0,
+          MAX_HISTORY_ITEMS
+        );
+    }
+
+    saveHistoryMemory();
+    renderHistory();
+
+    return true;
+  }
+
+  function restoreCurrentMemory(){
+    let saved = null;
+
+    try{
+      saved = JSON.parse(
+        localStorage.getItem(CURRENT_MEMORY_KEY) || "null"
+      );
+    }catch(_){
+      saved = null;
+    }
+
+    if(!saved || typeof saved !== "object"){
+      return;
+    }
+
+    restoringMemory = true;
+
+    if(saved.currency === "KHR"){
+      $("currency").value = "KHR";
+    }else{
+      $("currency").value = "USD";
+    }
+
+    if(num(saved.rate) > 0){
+      $("calcRate").value =
+        String(num(saved.rate));
+    }
+
+    discountUSD =
+      Math.max(
+        0,
+        num(saved.discountUSD)
+      );
+
+    lines =
+      Array.isArray(saved.lines)
+        ? saved.lines.map(line=>({
+            id:
+              clean(line.id) ||
+              (
+                "CALC-" +
+                Date.now() +
+                "-" +
+                Math.random()
+                  .toString(36)
+                  .slice(2,7)
+              ),
+            productCode:clean(line.productCode),
+            productName:clean(line.productName),
+            unit:clean(line.unit),
+            qty:num(line.qty),
+            usdPrice:num(line.usdPrice)
+          }))
+          .filter(
+            line =>
+              line.productName &&
+              line.qty > 0
+          )
+        : [];
+
+    restoringMemory = false;
+
+    updateCurrencyUI();
+    renderLines();
+  }
+
+  function formatHistoryDate(timestamp){
+    const date =
+      new Date(num(timestamp));
+
+    if(Number.isNaN(date.getTime())){
+      return "-";
+    }
+
+    return date.toLocaleString(
+      undefined,
+      {
+        year:"numeric",
+        month:"short",
+        day:"2-digit",
+        hour:"2-digit",
+        minute:"2-digit"
+      }
+    );
+  }
+
+  function renderHistory(){
+    const box =
+      $("historyList");
+
+    if(!box) return;
+
+    if(!history.length){
+      box.innerHTML =
+        '<div class="history-empty">' +
+          'No calculator history yet.<br>' +
+          'Tap <strong>New Calculation</strong> to save the current calculation into history.' +
+        '</div>';
+      return;
+    }
+
+    box.innerHTML =
+      '<div class="history-list">' +
+      history.map((entry,index)=>{
+        const totals =
+          getTotalsForState(entry);
+
+        const entryCurrency =
+          entry.currency === "KHR"
+            ? "KHR"
+            : "USD";
+
+        const entryRate =
+          Math.max(
+            1,
+            num(entry.rate) || 4060
+          );
+
+        const grandDisplay =
+          entryCurrency === "KHR"
+            ? totals.grandUSD * entryRate
+            : totals.grandUSD;
+
+        return `
+          <div class="history-item" data-history-id="${esc(entry.id)}">
+
+            <div class="history-item-top">
+              <div>
+                <div class="history-item-title">
+                  Calculation ${history.length - index}
+                </div>
+
+                <div class="history-item-meta">
+                  ${esc(formatHistoryDate(entry.createdAt))}
+                  · ${entry.lines.length} item${entry.lines.length === 1 ? "" : "s"}
+                  · ${entryCurrency}
+                </div>
+              </div>
+
+              <div class="history-total">
+                ${formatMoney(grandDisplay,entryCurrency)}
+              </div>
+            </div>
+
+            <div class="history-item-products">
+              ${entry.lines.map(line=>`
+                <div class="history-product">
+                  <span>
+                    ${esc(line.productName)}
+                    × ${num(line.qty).toLocaleString("en-US")}
+                  </span>
+
+                  <strong>
+                    ${
+                      formatMoney(
+                        num(line.qty) *
+                        (
+                          entryCurrency === "KHR"
+                            ? num(line.usdPrice) * entryRate
+                            : num(line.usdPrice)
+                        ),
+                        entryCurrency
+                      )
+                    }
+                  </strong>
+                </div>
+              `).join("")}
+            </div>
+
+            <div class="history-item-buttons">
+              <button
+                type="button"
+                class="history-small-btn history-load"
+                data-history-load="${esc(entry.id)}"
+              >
+                Load This Calculation
+              </button>
+
+              <button
+                type="button"
+                class="history-small-btn history-delete"
+                data-history-delete="${esc(entry.id)}"
+              >
+                Delete
+              </button>
+            </div>
+
+          </div>
+        `;
+      }).join("") +
+      "</div>";
+
+    box
+      .querySelectorAll("[data-history-load]")
+      .forEach(button=>{
+        button.addEventListener(
+          "click",
+          ()=>{
+            loadHistoryEntry(
+              button.dataset.historyLoad
+            );
+          }
+        );
+      });
+
+    box
+      .querySelectorAll("[data-history-delete]")
+      .forEach(button=>{
+        button.addEventListener(
+          "click",
+          ()=>{
+            deleteHistoryEntry(
+              button.dataset.historyDelete
+            );
+          }
+        );
+      });
+  }
+
+  function loadHistoryEntry(id){
+    const entry =
+      history.find(
+        item =>
+          clean(item.id) === clean(id)
+      );
+
+    if(!entry) return;
+
+    restoringMemory = true;
+
+    $("currency").value =
+      entry.currency === "KHR"
+        ? "KHR"
+        : "USD";
+
+    $("calcRate").value =
+      String(
+        Math.max(
+          1,
+          num(entry.rate) || 4060
+        )
+      );
+
+    discountUSD =
+      Math.max(
+        0,
+        num(entry.discountUSD)
+      );
+
+    lines =
+      entry.lines.map(line=>({
+        id:
+          "CALC-" +
+          Date.now() +
+          "-" +
+          Math.random()
+            .toString(36)
+            .slice(2,7),
+        productCode:clean(line.productCode),
+        productName:clean(line.productName),
+        unit:clean(line.unit),
+        qty:num(line.qty),
+        usdPrice:num(line.usdPrice)
+      }));
+
+    restoringMemory = false;
+
+    updateCurrencyUI();
+    renderLines();
+    saveCurrentMemory();
+
+    $("historyPanel").hidden = true;
+    $("historyToggleBtn").textContent =
+      "Show History";
+
+    $("productSearch").focus();
+  }
+
+  function deleteHistoryEntry(id){
+    history =
+      history.filter(
+        item =>
+          clean(item.id) !== clean(id)
+      );
+
+    saveHistoryMemory();
+    renderHistory();
+  }
+
+  function clearHistory(){
+    history = [];
+
+    try{
+      localStorage.removeItem(
+        HISTORY_MEMORY_KEY
+      );
+    }catch(_){}
+
+    renderHistory();
   }
 
   function currency(){
@@ -1875,9 +2507,11 @@
           "USD"
         );
     }
+
+    saveCurrentMemory();
   }
 
-  function clearAll(){
+  function resetCurrentCalculation(clearStoredMemory = true){
     lines = [];
     discountUSD = 0;
     pendingProduct = null;
@@ -1887,9 +2521,23 @@
     $("discount").value = "0";
 
     hideSuggestions();
+
+    if(clearStoredMemory){
+      clearCurrentMemory();
+    }
+
     renderLines();
 
     $("productSearch").focus();
+  }
+
+  function clearAll(){
+    resetCurrentCalculation(true);
+  }
+
+  function startNewCalculation(){
+    archiveCurrentCalculation();
+    resetCurrentCalculation(true);
   }
 
   function loadProducts(){
@@ -2165,12 +2813,43 @@
   $("newBtn")
     .addEventListener(
       "click",
-      clearAll
+      startNewCalculation
     );
 
+  $("historyToggleBtn")
+    .addEventListener(
+      "click",
+      ()=>{
+        const panel =
+          $("historyPanel");
+
+        panel.hidden =
+          !panel.hidden;
+
+        $("historyToggleBtn").textContent =
+          panel.hidden
+            ? "Show History"
+            : "Hide History";
+      }
+    );
+
+  $("historyClearBtn")
+    .addEventListener(
+      "click",
+      clearHistory
+    );
+
+  loadHistoryMemory();
+  renderHistory();
+
   loadRate();
-  updateCurrencyUI();
-  renderLines();
+  restoreCurrentMemory();
+
+  if(!localStorage.getItem(CURRENT_MEMORY_KEY)){
+    updateCurrencyUI();
+    renderLines();
+  }
+
   loadProducts();
 
 })();
