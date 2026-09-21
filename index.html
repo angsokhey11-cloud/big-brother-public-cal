@@ -722,8 +722,72 @@
       grid-template-columns:1fr;
     }
 
+    /*
+      Mobile modal placement:
+      - keep the card smaller than the phone width
+      - place the card 25% down from the currently visible viewport
+      - iPhone Safari visualViewport values are injected below so the
+        on-screen keyboard cannot become the positioning reference.
+    */
+    .modal{
+      inset:auto 0 auto 0;
+      top:var(--bb-modal-viewport-top,0px);
+      height:var(--bb-modal-viewport-height,100dvh);
+      align-items:flex-start;
+      justify-content:center;
+      padding:
+        var(--bb-modal-top-space,25dvh)
+        12px
+        max(12px,env(safe-area-inset-bottom));
+      overflow:auto;
+    }
+
     .dialog{
-      width:100%;
+      width:min(88vw,350px);
+      max-height:calc(var(--bb-modal-viewport-height,100dvh) - var(--bb-modal-top-space,25dvh) - 18px);
+      overflow:auto;
+      border-radius:14px;
+    }
+
+    .dialog-head{
+      padding:13px 14px 9px;
+    }
+
+    .dialog-head h3{
+      font-size:17px;
+    }
+
+    .dialog-meta{
+      padding:0 14px 9px;
+    }
+
+    .dialog-body{
+      padding:0 14px 12px;
+    }
+
+    .qty-entry{
+      grid-template-columns:44px minmax(0,1fr) 44px;
+      gap:7px;
+    }
+
+    .qty-entry button{
+      min-height:46px;
+      font-size:21px;
+    }
+
+    .qty-entry input,
+    #priceInput{
+      min-height:49px;
+      font-size:21px;
+    }
+
+    .dialog-actions{
+      gap:7px;
+      padding:10px 14px 13px;
+    }
+
+    .dialog-actions button{
+      min-height:41px;
     }
   }
 
@@ -1141,6 +1205,44 @@
 
   const $ = id =>
     document.getElementById(id);
+
+  /*
+    iPhone Safari keeps a separate visual viewport when the keyboard opens.
+    Keep modal positioning tied to the actually visible screen.
+  */
+  function syncMobileModalViewport(){
+    if(window.innerWidth > 760){
+      document.documentElement.style.removeProperty("--bb-modal-viewport-top");
+      document.documentElement.style.removeProperty("--bb-modal-viewport-height");
+      document.documentElement.style.removeProperty("--bb-modal-top-space");
+      return;
+    }
+
+    const viewport = window.visualViewport;
+    const visibleTop = viewport ? viewport.offsetTop : 0;
+    const visibleHeight = viewport ? viewport.height : window.innerHeight;
+
+    document.documentElement.style.setProperty(
+      "--bb-modal-viewport-top",
+      Math.max(0,visibleTop) + "px"
+    );
+    document.documentElement.style.setProperty(
+      "--bb-modal-viewport-height",
+      Math.max(1,visibleHeight) + "px"
+    );
+    document.documentElement.style.setProperty(
+      "--bb-modal-top-space",
+      Math.max(14,visibleHeight * 0.25) + "px"
+    );
+  }
+
+  syncMobileModalViewport();
+  window.addEventListener("resize",syncMobileModalViewport,{passive:true});
+  window.addEventListener("orientationchange",syncMobileModalViewport,{passive:true});
+  if(window.visualViewport){
+    window.visualViewport.addEventListener("resize",syncMobileModalViewport,{passive:true});
+    window.visualViewport.addEventListener("scroll",syncMobileModalViewport,{passive:true});
+  }
 
   const clean = value =>
     String(value == null ? "" : value).trim();
@@ -1968,6 +2070,8 @@
     $("qtyModal")
       .classList.remove("hidden");
 
+    syncMobileModalViewport();
+
     setTimeout(()=>{
       $("qtyInput").focus();
       $("qtyInput").select();
@@ -2079,6 +2183,8 @@
 
     $("priceModal")
       .classList.remove("hidden");
+
+    syncMobileModalViewport();
 
     setTimeout(()=>{
       $("priceInput").focus();
