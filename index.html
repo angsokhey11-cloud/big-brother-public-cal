@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>BIG BROTHER — Standalone Calculator V1.1 History & Memory</title>
 
 <style>
@@ -692,7 +692,8 @@
       width:100%;
       min-width:88px;
       min-height:42px;
-      font-size:14px;
+      /* iOS Safari auto-zooms focused inputs below 16px. */
+      font-size:16px;
     }
 
     .price-editor small{text-align:left}
@@ -730,27 +731,31 @@
         on-screen keyboard cannot become the positioning reference.
     */
     .modal{
-      inset:auto 0 auto 0;
+      inset:auto;
       top:var(--bb-modal-viewport-top,0px);
+      left:var(--bb-modal-viewport-left,0px);
+      width:var(--bb-modal-viewport-width,100vw);
       height:var(--bb-modal-viewport-height,100dvh);
       align-items:flex-start;
       justify-content:center;
       padding:
         var(--bb-modal-top-space,25dvh)
-        12px
-        max(12px,env(safe-area-inset-bottom));
+        10px
+        max(10px,env(safe-area-inset-bottom));
       overflow:auto;
+      overscroll-behavior:contain;
     }
 
     .dialog{
-      width:min(88vw,350px);
-      max-height:calc(var(--bb-modal-viewport-height,100dvh) - var(--bb-modal-top-space,25dvh) - 18px);
+      width:var(--bb-modal-card-width,min(84vw,320px));
+      max-width:320px;
+      max-height:calc(var(--bb-modal-viewport-height,100dvh) - var(--bb-modal-top-space,25dvh) - 14px);
       overflow:auto;
-      border-radius:14px;
+      border-radius:13px;
     }
 
     .dialog-head{
-      padding:13px 14px 9px;
+      padding:11px 12px 7px;
     }
 
     .dialog-head h3{
@@ -758,36 +763,37 @@
     }
 
     .dialog-meta{
-      padding:0 14px 9px;
+      padding:0 12px 7px;
     }
 
     .dialog-body{
-      padding:0 14px 12px;
+      padding:0 12px 10px;
     }
 
     .qty-entry{
-      grid-template-columns:44px minmax(0,1fr) 44px;
-      gap:7px;
+      grid-template-columns:40px minmax(0,1fr) 40px;
+      gap:6px;
     }
 
     .qty-entry button{
-      min-height:46px;
-      font-size:21px;
+      min-height:42px;
+      font-size:20px;
     }
 
     .qty-entry input,
     #priceInput{
-      min-height:49px;
-      font-size:21px;
+      min-height:44px;
+      font-size:19px;
     }
 
     .dialog-actions{
-      gap:7px;
-      padding:10px 14px 13px;
+      gap:6px;
+      padding:8px 12px 10px;
     }
 
     .dialog-actions button{
-      min-height:41px;
+      min-height:38px;
+      font-size:13px;
     }
   }
 
@@ -1212,19 +1218,39 @@
   */
   function syncMobileModalViewport(){
     if(window.innerWidth > 760){
-      document.documentElement.style.removeProperty("--bb-modal-viewport-top");
-      document.documentElement.style.removeProperty("--bb-modal-viewport-height");
-      document.documentElement.style.removeProperty("--bb-modal-top-space");
+      [
+        "--bb-modal-viewport-top",
+        "--bb-modal-viewport-left",
+        "--bb-modal-viewport-width",
+        "--bb-modal-viewport-height",
+        "--bb-modal-top-space",
+        "--bb-modal-card-width"
+      ].forEach(name=>document.documentElement.style.removeProperty(name));
       return;
     }
 
     const viewport = window.visualViewport;
     const visibleTop = viewport ? viewport.offsetTop : 0;
+    const visibleLeft = viewport ? viewport.offsetLeft : 0;
+    const visibleWidth = viewport ? viewport.width : window.innerWidth;
     const visibleHeight = viewport ? viewport.height : window.innerHeight;
 
+    /*
+      Keep the card anchored to the actual visible iPhone/Android viewport.
+      This remains correct while the software keyboard is open and also if
+      Safari temporarily reports a zoomed visual viewport.
+    */
     document.documentElement.style.setProperty(
       "--bb-modal-viewport-top",
       Math.max(0,visibleTop) + "px"
+    );
+    document.documentElement.style.setProperty(
+      "--bb-modal-viewport-left",
+      Math.max(0,visibleLeft) + "px"
+    );
+    document.documentElement.style.setProperty(
+      "--bb-modal-viewport-width",
+      Math.max(1,visibleWidth) + "px"
     );
     document.documentElement.style.setProperty(
       "--bb-modal-viewport-height",
@@ -1232,7 +1258,11 @@
     );
     document.documentElement.style.setProperty(
       "--bb-modal-top-space",
-      Math.max(14,visibleHeight * 0.25) + "px"
+      Math.max(12,visibleHeight * 0.25) + "px"
+    );
+    document.documentElement.style.setProperty(
+      "--bb-modal-card-width",
+      Math.max(240,Math.min(320,visibleWidth * 0.84)) + "px"
     );
   }
 
