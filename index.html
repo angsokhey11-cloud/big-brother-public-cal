@@ -1256,9 +1256,14 @@
       "--bb-modal-viewport-height",
       Math.max(1,visibleHeight) + "px"
     );
+    const anchorHeight =
+      bbModalPageLocked && bbModalBaseHeight > 0
+        ? bbModalBaseHeight
+        : visibleHeight;
+
     document.documentElement.style.setProperty(
       "--bb-modal-top-space",
-      Math.max(12,visibleHeight * 0.25) + "px"
+      Math.max(12,anchorHeight * 0.25) + "px"
     );
     document.documentElement.style.setProperty(
       "--bb-modal-card-width",
@@ -1272,6 +1277,113 @@
   if(window.visualViewport){
     window.visualViewport.addEventListener("resize",syncMobileModalViewport,{passive:true});
     window.visualViewport.addEventListener("scroll",syncMobileModalViewport,{passive:true});
+  }
+
+  let bbModalPageLocked=false;
+  let bbModalScrollY=0;
+  let bbModalBaseHeight=0;
+  let bbSavedBodyStyle=null;
+  let bbSavedHtmlOverflow="";
+
+  function isMobileLayout(){
+    return window.innerWidth <= 760;
+  }
+
+  function blurActiveField(){
+    const active=document.activeElement;
+    if(active && typeof active.blur==="function"){
+      try{ active.blur(); }catch(_){}
+    }
+  }
+
+  function lockMobileModalPage(){
+    if(!isMobileLayout() || bbModalPageLocked) return;
+
+    bbModalScrollY=window.scrollY || window.pageYOffset || 0;
+    const viewport=window.visualViewport;
+    bbModalBaseHeight=Math.max(
+      window.innerHeight || 0,
+      viewport ? viewport.height : 0
+    );
+
+    bbSavedBodyStyle={
+      position:document.body.style.position,
+      top:document.body.style.top,
+      left:document.body.style.left,
+      right:document.body.style.right,
+      width:document.body.style.width,
+      overflow:document.body.style.overflow
+    };
+    bbSavedHtmlOverflow=document.documentElement.style.overflow;
+
+    document.body.style.position="fixed";
+    document.body.style.top=(-bbModalScrollY)+"px";
+    document.body.style.left="0";
+    document.body.style.right="0";
+    document.body.style.width="100%";
+    document.body.style.overflow="hidden";
+    document.documentElement.style.overflow="hidden";
+
+    bbModalPageLocked=true;
+  }
+
+  function unlockMobileModalPage(){
+    if(!bbModalPageLocked) return;
+
+    const saved=bbSavedBodyStyle || {};
+    document.body.style.position=saved.position || "";
+    document.body.style.top=saved.top || "";
+    document.body.style.left=saved.left || "";
+    document.body.style.right=saved.right || "";
+    document.body.style.width=saved.width || "";
+    document.body.style.overflow=saved.overflow || "";
+    document.documentElement.style.overflow=bbSavedHtmlOverflow || "";
+
+    bbModalPageLocked=false;
+    bbModalBaseHeight=0;
+    bbSavedBodyStyle=null;
+
+    window.scrollTo(0,bbModalScrollY);
+    syncMobileModalViewport();
+  }
+
+  function openStableModal(id){
+    blurActiveField();
+    lockMobileModalPage();
+
+    const modal=$(id);
+    if(!modal) return;
+    modal.classList.remove("hidden");
+
+    syncMobileModalViewport();
+
+    // Let iOS/Android finish closing any previous software keyboard first.
+    setTimeout(syncMobileModalViewport,120);
+    setTimeout(syncMobileModalViewport,280);
+  }
+
+  function closeStableModal(id){
+    const modal=$(id);
+    if(modal) modal.classList.add("hidden");
+    blurActiveField();
+
+    const anotherOpen=
+      !$("qtyModal").classList.contains("hidden") ||
+      !$("priceModal").classList.contains("hidden");
+
+    if(!anotherOpen){
+      unlockMobileModalPage();
+    }
+  }
+
+  function desktopAutoFocus(id,selectText=false){
+    if(isMobileLayout()) return;
+    setTimeout(()=>{
+      const el=$(id);
+      if(!el) return;
+      el.focus();
+      if(selectText && typeof el.select==="function") el.select();
+    },30);
   }
 
   const clean = value =>
@@ -1824,7 +1936,7 @@
     $("historyToggleBtn").textContent =
       "Show History";
 
-    $("productSearch").focus();
+    desktopAutoFocus("productSearch");
   }
 
   function deleteHistoryEntry(id){
@@ -2097,30 +2209,20 @@
     $("qtyInput").value = "1";
     $("qtyStatus").textContent = "";
 
-    $("qtyModal")
-      .classList.remove("hidden");
-
-    syncMobileModalViewport();
-
-    setTimeout(()=>{
-      $("qtyInput").focus();
-      $("qtyInput").select();
-    },30);
+    openStableModal("qtyModal");
+    desktopAutoFocus("qtyInput",true);
   }
 
   function closeQty(){
     pendingProduct = null;
 
-    $("qtyModal")
-      .classList.add("hidden");
+    closeStableModal("qtyModal");
 
     $("qtyStatus").textContent = "";
 
     $("productSearch").value = "";
 
-    setTimeout(()=>{
-      $("productSearch").focus();
-    },30);
+    desktopAutoFocus("productSearch");
   }
 
   function adjustQty(delta){
@@ -2145,7 +2247,7 @@
             )
           );
 
-    $("qtyInput").focus();
+    if(!isMobileLayout()) $("qtyInput").focus();
   }
 
   function confirmQty(event){
@@ -2166,7 +2268,7 @@
       $("qtyStatus").style.color =
         "#c0392b";
 
-      $("qtyInput").focus();
+      if(!isMobileLayout()) $("qtyInput").focus();
       return;
     }
 
@@ -2175,6 +2277,7 @@
     const product =
       pendingProduct;
 
+    blurActiveField();
     $("qtyModal")
       .classList.add("hidden");
 
@@ -2211,31 +2314,21 @@
 
     $("priceStatus").textContent = "";
 
-    $("priceModal")
-      .classList.remove("hidden");
-
-    syncMobileModalViewport();
-
-    setTimeout(()=>{
-      $("priceInput").focus();
-      $("priceInput").select();
-    },30);
+    openStableModal("priceModal");
+    desktopAutoFocus("priceInput",true);
   }
 
   function closePrice(){
     pendingProduct = null;
     pendingQty = 0;
 
-    $("priceModal")
-      .classList.add("hidden");
+    closeStableModal("priceModal");
 
     $("priceStatus").textContent = "";
 
     $("productSearch").value = "";
 
-    setTimeout(()=>{
-      $("productSearch").focus();
-    },30);
+    desktopAutoFocus("productSearch");
   }
 
   function confirmPrice(event){
@@ -2259,7 +2352,7 @@
       $("priceStatus").style.color =
         "#c0392b";
 
-      $("priceInput").focus();
+      if(!isMobileLayout()) $("priceInput").focus();
       return;
     }
 
@@ -2296,16 +2389,13 @@
     pendingProduct = null;
     pendingQty = 0;
 
-    $("priceModal")
-      .classList.add("hidden");
+    closeStableModal("priceModal");
 
     $("productSearch").value = "";
 
     renderLines();
 
-    setTimeout(()=>{
-      $("productSearch").focus();
-    },30);
+    desktopAutoFocus("productSearch");
   }
 
   function renderLines(){
@@ -2532,13 +2622,8 @@
               $("qtyInput").value =
                 String(line.qty);
 
-              $("qtyModal")
-                .classList.remove("hidden");
-
-              setTimeout(()=>{
-                $("qtyInput").focus();
-                $("qtyInput").select();
-              },30);
+              openStableModal("qtyModal");
+              desktopAutoFocus("qtyInput",true);
 
               $("qtyForm").dataset.editLineId =
                 line.id;
@@ -2664,7 +2749,7 @@
 
     renderLines();
 
-    $("productSearch").focus();
+    desktopAutoFocus("productSearch");
   }
 
   function clearAll(){
@@ -2872,11 +2957,11 @@
           ){
             line.qty = qty;
             $("qtyForm").dataset.editLineId = "";
-            $("qtyModal").classList.add("hidden");
+            closeStableModal("qtyModal");
             pendingProduct = null;
             pendingQty = 0;
             renderLines();
-            $("productSearch").focus();
+            desktopAutoFocus("productSearch");
           }
 
           return;
